@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { AgentStep, Provider, ReviewResult } from "@/lib/types";
 import type { DeviceResults } from "@/app/page";
 import { PROVIDERS } from "@/lib/providers";
@@ -42,9 +42,17 @@ export function InputPhase({
   apiKey, setApiKey,
   onResults,
 }: Props) {
-  const [loading, setLoading] = useState(false);
-  const [steps,   setSteps]   = useState<AgentStep[]>([]);
-  const [error,   setError]   = useState<string | null>(null);
+  const [loading,   setLoading]   = useState(false);
+  const [steps,     setSteps]     = useState<AgentStep[]>([]);
+  const [error,     setError]     = useState<string | null>(null);
+  const [elapsed,   setElapsed]   = useState(0);
+
+  // 経過時間カウンター（loading 中のみ）
+  useEffect(() => {
+    if (!loading) { setElapsed(0); return; }
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [loading]);
 
   const hasImage  = !!pcImage || !!spImage;
   const needsKey  = provider.needsKey;
@@ -118,11 +126,42 @@ export function InputPhase({
   }
 
   if (loading) {
+    const min = Math.floor(elapsed / 60);
+    const sec = elapsed % 60;
+    const timeStr = min > 0
+      ? `${min}分${String(sec).padStart(2, "0")}秒`
+      : `${sec}秒`;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>
-          AIエージェントが分析中です...
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>
+            AIエージェントが分析中です...
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 13, color: C.muted, fontFamily: FONT.mono }}>
+              {timeStr}
+            </span>
+            <button
+              onClick={() => { setLoading(false); setSteps([]); setError("分析をキャンセルしました"); }}
+              style={{
+                fontSize: 12, color: C.muted,
+                background: C.surface, border: `1px solid ${C.border}`,
+                borderRadius: 6, padding: "4px 12px", cursor: "pointer",
+              }}
+            >
+              キャンセル
+            </button>
+          </div>
         </div>
+        {elapsed > 90 && (
+          <div style={{
+            fontSize: 12, color: C.muted,
+            background: C.surfaceAlt, border: `1px solid ${C.border}`,
+            borderRadius: 8, padding: "10px 14px",
+          }}>
+            ⏳ 時間がかかっています。Synthesis（統合）ステップは画像解析のため長くなる場合があります。
+          </div>
+        )}
         <AgentProgress steps={steps} />
       </div>
     );
