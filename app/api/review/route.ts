@@ -12,19 +12,37 @@ export async function POST(req: NextRequest) {
   const send = (event: string, data: unknown) =>
     writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
 
+  const prov  = provider ?? "claude";
+  const model = modelId  ?? "claude-sonnet-4-6";
+
+  const pcB64 = pcImage?.replace(/^data:image\/\w+;base64,/, "") as string | undefined;
+  const spB64 = spImage?.replace(/^data:image\/\w+;base64,/, "") as string | undefined;
+
   (async () => {
     try {
-      const result = await runAgentLoop({
-        context,
-        lpUrl,
-        pcImageB64: pcImage?.replace(/^data:image\/\w+;base64,/, ""),
-        spImageB64: spImage?.replace(/^data:image\/\w+;base64,/, ""),
-        provider:   provider ?? "claude",
-        modelId:    modelId  ?? "claude-sonnet-4-6",
-        apiKey,
-        onStep: (step: AgentStep) => send("step", step),
-      });
-      send("result", result);
+      // ── PC レビュー ──────────────────────────────────
+      if (pcB64) {
+        const pcResult = await runAgentLoop({
+          context, lpUrl,
+          pcImageB64: pcB64,
+          provider: prov, modelId: model, apiKey,
+          onStep: (step: AgentStep) =>
+            send("step", { ...step, id: `pc:${step.id}`, label: `[PC] ${step.label}` }),
+        });
+        send("result_pc", pcResult);
+      }
+
+      // ── SP レビュー ──────────────────────────────────
+      if (spB64) {
+        const spResult = await runAgentLoop({
+          context, lpUrl,
+          spImageB64: spB64,
+          provider: prov, modelId: model, apiKey,
+          onStep: (step: AgentStep) =>
+            send("step", { ...step, id: `sp:${step.id}`, label: `[SP] ${step.label}` }),
+        });
+        send("result_sp", spResult);
+      }
     } catch (err: unknown) {
       send("error", { message: err instanceof Error ? err.message : String(err) });
     } finally {

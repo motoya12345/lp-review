@@ -23,6 +23,7 @@ export interface ReviewResult {
   next_action: string;
   lpUrl?:      string;
   reviewedAt?: string;
+  sources?:    { title: string; url: string }[];
 }
 
 // ─── エージェント進捗 ──────────────────────────────

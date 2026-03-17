@@ -66,7 +66,15 @@ async function callGemini(input: { modelId: string; apiKey: string; system: stri
       generationConfig:   { maxOutputTokens: input.maxTokens },
     }),
   });
-  if (!res.ok) throw new Error(`Gemini error: ${res.status}`);
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`Gemini error: ${res.status} ${errBody.slice(0, 200)}`);
+  }
   const json = await res.json();
-  return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    const reason = json.candidates?.[0]?.finishReason ?? json.promptFeedback?.blockReason ?? "empty response";
+    throw new Error(`Gemini returned no content (${reason})`);
+  }
+  return text;
 }

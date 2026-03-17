@@ -1,13 +1,55 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AnnotatedImage } from "./AnnotatedImage";
 import { IssueCard }      from "./IssueCard";
 import type { ReviewResult } from "@/lib/types";
 import { C, FONT, SEVERITY_COLOR } from "@/lib/tokens";
 
+const SEV_LABEL: Record<string, string> = {
+  critical: "重大",
+  major:    "要改善",
+  minor:    "軽微",
+};
+
+function buildSlackText(result: ReviewResult, deviceLabel?: string): string {
+  const lines: string[] = [];
+  lines.push(`【LPレビュー結果】${deviceLabel ? `（${deviceLabel}）` : ""}`);
+  lines.push("");
+  lines.push("■ 総評");
+  lines.push(result.summary);
+  if (result.strengths.length > 0) {
+    lines.push("");
+    lines.push("★ 強み");
+    result.strengths.forEach((s) => lines.push(`• ${s}`));
+  }
+  lines.push("");
+  lines.push(`■ 指摘事項（${result.issues.length}件）`);
+  result.issues.forEach((issue) => {
+    lines.push("");
+    lines.push(`[${SEV_LABEL[issue.severity] ?? issue.severity}] ${issue.id}. ${issue.area}`);
+    lines.push(`問題: ${issue.problem}`);
+    lines.push(`理由: ${issue.why}`);
+    lines.push(`改善: ${issue.how}`);
+    lines.push(`Before: ${issue.before}`);
+    lines.push(`After:  ${issue.after}`);
+  });
+  if (result.next_action) {
+    lines.push("");
+    lines.push("▶ 今すぐやること");
+    lines.push(result.next_action);
+  }
+  if (result.sources && result.sources.length > 0) {
+    lines.push("");
+    lines.push("📎 参考サイト");
+    result.sources.slice(0, 5).forEach((s) => lines.push(`• ${s.title}  ${s.url}`));
+  }
+  return lines.join("\n");
+}
+
 interface Props {
-  result:   ReviewResult;
+  pcResult: ReviewResult | null;
+  spResult: ReviewResult | null;
   pcImage:  string | null;
   spImage:  string | null;
   provider: string;
@@ -15,10 +57,10 @@ interface Props {
   onReset:  () => void;
 }
 
-export function ResultPhase({ result, pcImage, spImage, provider, modelId, onReset }: Props) {
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [tab, setTab]           = useState<"pc" | "sp">("pc");
-  const [narrow, setNarrow]     = useState(false);
+export function ResultPhase({ pcResult, spResult, pcImage, spImage, provider, modelId, onReset }: Props) {
+  const hasBoth = !!pcResult && !!spResult;
+  const [tab,    setTab]    = useState<"pc" | "sp">(pcResult ? "pc" : "sp");
+  const [narrow, setNarrow] = useState(false);
 
   useEffect(() => {
     const check = () => setNarrow(window.innerWidth < 768);
@@ -27,7 +69,76 @@ export function ResultPhase({ result, pcImage, spImage, provider, modelId, onRes
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  const previewImage = pcImage && spImage ? (tab === "pc" ? pcImage : spImage) : (pcImage ?? spImage);
+  const activeResult = tab === "pc" ? pcResult : spResult;
+  const activeImage  = tab === "pc" ? pcImage  : spImage;
+
+  return (
+    <div>
+      {/* タブ（両方ある場合） */}
+      {hasBoth && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+          {(["pc", "sp"] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              fontFamily:   FONT.mono,
+              fontSize:     13,
+              fontWeight:   700,
+              color:        tab === t ? "#fff" : C.muted,
+              background:   tab === t ? C.red  : C.surface,
+              border:       `1px solid ${tab === t ? C.red : C.border}`,
+              borderRadius: 6,
+              padding:      "6px 20px",
+              cursor:       "pointer",
+              transition:   "all .15s",
+            }}>
+              {t.toUpperCase()} レビュー
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeResult && (
+        <DeviceView
+          result={activeResult}
+          image={activeImage}
+          provider={provider}
+          modelId={modelId}
+          narrow={narrow}
+          deviceLabel={hasBoth ? (tab === "pc" ? "PC版" : "SP版") : undefined}
+        />
+      )}
+
+      <button onClick={onReset} style={{
+        width: "100%", height: 46, background: C.surface,
+        border: `1px solid ${C.border}`, color: C.muted,
+        borderRadius: 10, fontSize: 13, cursor: "pointer",
+        marginTop: 24, transition: "all .15s",
+      }}>
+        ← 別のLPをレビューする
+      </button>
+    </div>
+  );
+}
+
+/* ── 1デバイス分の表示 ───────────────────────────── */
+function DeviceView({
+  result, image, provider, modelId, narrow, deviceLabel,
+}: {
+  result:      ReviewResult;
+  image:       string | null;
+  provider:    string;
+  modelId:     string;
+  narrow:      boolean;
+  deviceLabel?: string;
+}) {
+  const [activeId,  setActiveId]  = useState<number | null>(null);
+  const [copied,    setCopied]    = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    const text = buildSlackText(result, deviceLabel);
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [result, deviceLabel]);
 
   const critical = result.issues.filter((i) => i.severity === "critical").length;
   const major    = result.issues.filter((i) => i.severity === "major").length;
@@ -40,18 +151,36 @@ export function ResultPhase({ result, pcImage, spImage, provider, modelId, onRes
         background: C.surface, border: `1px solid ${C.border}`,
         borderRadius: 12, padding: "20px 22px", marginBottom: 24,
       }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, fontFamily: FONT.mono, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 8px", color: C.sub }}>
-            {provider}
-          </span>
-          <span style={{ fontSize: 11, fontFamily: FONT.mono, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 8px", color: C.muted }}>
-            {modelId}
-          </span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {deviceLabel && (
+              <span style={{ fontSize: 11, fontFamily: FONT.mono, background: C.red + "15", border: `1px solid ${C.redBorder}`, borderRadius: 4, padding: "2px 8px", color: C.red, fontWeight: 700 }}>
+                {deviceLabel}
+              </span>
+            )}
+            <span style={{ fontSize: 11, fontFamily: FONT.mono, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 8px", color: C.sub }}>
+              {provider}
+            </span>
+            <span style={{ fontSize: 11, fontFamily: FONT.mono, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 8px", color: C.muted }}>
+              {modelId}
+            </span>
+          </div>
+          <button onClick={handleCopy} style={{
+            display: "flex", alignItems: "center", gap: 5,
+            fontSize: 12, fontWeight: 600,
+            color:      copied ? C.green  : C.sub,
+            background: copied ? C.greenBg : C.surfaceAlt,
+            border:     `1px solid ${copied ? C.greenBd : C.border}`,
+            borderRadius: 6, padding: "4px 12px",
+            cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap",
+          }}>
+            {copied ? "✓ コピー完了" : "📋 Slackにコピー"}
+          </button>
         </div>
         <div style={{ fontFamily: FONT.mono, fontSize: 10, color: C.muted, letterSpacing: "0.12em", marginBottom: 10 }}>
           REVIEW SUMMARY
         </div>
-        <p style={{ fontSize: 14, color: C.text, lineHeight: 1.8, marginBottom: 16, margin: "0 0 16px" }}>
+        <p style={{ fontSize: 14, color: C.text, lineHeight: 1.8, margin: "0 0 16px" }}>
           {result.summary}
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -102,29 +231,14 @@ export function ResultPhase({ result, pcImage, spImage, provider, modelId, onRes
       }}>
         {/* 左: アノテーション付き画像 */}
         <div style={narrow ? {} : { position: "sticky", top: 72 }}>
-          {pcImage && spImage && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-              {(["pc", "sp"] as const).map((t) => (
-                <button key={t} onClick={() => setTab(t)} style={{
-                  fontFamily: FONT.mono, fontSize: 11,
-                  color:      tab === t ? C.red : C.muted,
-                  background: tab === t ? C.surface : "transparent",
-                  border:     `1px solid ${tab === t ? C.redBorder : C.border}`,
-                  borderRadius: 5, padding: "3px 12px", cursor: "pointer",
-                }}>
-                  {t.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          )}
-          {previewImage && (
+          {image && (
             <div style={{
               background: C.surface, border: `1px solid ${C.border}`,
               borderRadius: 10, overflow: "hidden",
               boxShadow: "0 2px 12px rgba(0,0,0,.06)",
             }}>
               <AnnotatedImage
-                imageUrl={previewImage}
+                imageUrl={image}
                 issues={result.issues}
                 activeIssueId={activeId}
                 onClickIssue={(id) => setActiveId(id === activeId ? null : id)}
@@ -181,14 +295,42 @@ export function ResultPhase({ result, pcImage, spImage, provider, modelId, onRes
         </div>
       )}
 
-      <button onClick={onReset} style={{
-        width: "100%", height: 46, background: C.surface,
-        border: `1px solid ${C.border}`, color: C.muted,
-        borderRadius: 10, fontSize: 13, cursor: "pointer",
-        marginTop: 24, transition: "all .15s",
-      }}>
-        ← 別のLPをレビューする
-      </button>
+      {/* 参考サイト */}
+      {result.sources && result.sources.length > 0 && (
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: "16px 18px", marginTop: 16,
+        }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 10, color: C.muted, letterSpacing: "0.12em", marginBottom: 12 }}>
+            📎 REFERENCES — 参考サイト
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {result.sources.map((s, i) => (
+              <a
+                key={i}
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex", alignItems: "baseline", gap: 8,
+                  fontSize: 13, color: C.sub, textDecoration: "none",
+                  lineHeight: 1.5,
+                }}
+              >
+                <span style={{ color: C.muted, flexShrink: 0, fontFamily: FONT.mono, fontSize: 11 }}>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span style={{ flex: 1, borderBottom: `1px solid transparent` }}>
+                  {s.title}
+                </span>
+                <span style={{ fontSize: 11, color: C.muted, flexShrink: 0, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.url}
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

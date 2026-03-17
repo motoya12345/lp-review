@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { AgentStep, Provider, ReviewResult } from "@/lib/types";
+import type { DeviceResults } from "@/app/page";
 import { PROVIDERS } from "@/lib/providers";
 import ImageDropZone from "./ImageDropZone";
 import ProviderPicker from "./ProviderPicker";
@@ -29,7 +30,7 @@ interface Props {
   setModelId:  (v: string) => void;
   apiKey:      string;
   setApiKey:   (v: string) => void;
-  onResult:    (result: ReviewResult) => void;
+  onResults:   (results: DeviceResults) => void;
 }
 
 export function InputPhase({
@@ -39,7 +40,7 @@ export function InputPhase({
   provider, setProvider,
   modelId, setModelId,
   apiKey, setApiKey,
-  onResult,
+  onResults,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [steps,   setSteps]   = useState<AgentStep[]>([]);
@@ -54,6 +55,9 @@ export function InputPhase({
     setLoading(true);
     setError(null);
     setSteps([]);
+
+    const collected: DeviceResults = {};
+    let   hadError = false;
 
     try {
       const res = await fetch("/api/review", {
@@ -78,10 +82,9 @@ export function InputPhase({
         const { done, value } = await reader.read();
         if (done) break;
 
-        // チャンクをバッファに追記し、\n\n で区切られた完全なSSEメッセージを処理
         buffer += dec.decode(value, { stream: true });
         const messages = buffer.split("\n\n");
-        buffer = messages.pop() ?? ""; // 最後の不完全なメッセージはバッファに残す
+        buffer = messages.pop() ?? "";
 
         for (const message of messages) {
           let event = "";
@@ -93,11 +96,19 @@ export function InputPhase({
           if (!data) continue;
           try {
             const parsed = JSON.parse(data);
-            if (event === "step")   setSteps((prev) => upsertStep(prev, parsed as AgentStep));
-            if (event === "result") { onResult(parsed as ReviewResult); return; }
-            if (event === "error")  setError(parsed.message ?? "エラーが発生しました");
+            if (event === "step")      setSteps((prev) => upsertStep(prev, parsed as AgentStep));
+            if (event === "result_pc") collected.pc = parsed as ReviewResult;
+            if (event === "result_sp") collected.sp = parsed as ReviewResult;
+            if (event === "error")   { setError(parsed.message ?? "エラーが発生しました"); hadError = true; }
           } catch { /* ignore parse errors */ }
         }
+      }
+
+      // 結果が揃ったら画面遷移
+      if (collected.pc || collected.sp) {
+        onResults(collected);
+      } else if (!hadError) {
+        setError("レビュー結果を取得できませんでした");
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "レビューに失敗しました");
@@ -156,6 +167,9 @@ export function InputPhase({
           <div style={{ flex: "1 1 200px", minWidth: 0 }}>
             <ImageDropZone label="SP版（任意）" value={spImage} onChange={setSpImage} />
           </div>
+        </div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+          ※ PC版・SP版はそれぞれ独立したレビューが実行されます
         </div>
       </section>
 

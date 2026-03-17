@@ -22,8 +22,8 @@ export const PROVIDERS: Provider[] = [
     id: "gemini", name: "Gemini", needsKey: true,
     color: "#1a52a0", note: "Google APIキーが必要",
     models: [
-      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-      { id: "gemini-1.5-pro",   label: "Gemini 1.5 Pro"   },
+      { id: "gemini-2.0-flash",        label: "Gemini 2.0 Flash"    },
+      { id: "gemini-1.5-pro-latest",   label: "Gemini 1.5 Pro"      },
     ],
   },
 ];

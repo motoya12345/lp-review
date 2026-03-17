@@ -8,6 +8,11 @@ import { PROVIDERS }    from "@/lib/providers";
 import type { ReviewResult, Provider } from "@/lib/types";
 import { C } from "@/lib/tokens";
 
+export interface DeviceResults {
+  pc?: ReviewResult;
+  sp?: ReviewResult;
+}
+
 export default function Page() {
   const [context,  setContext]  = useState("");
   const [pcImage,  setPcImage]  = useState<string | null>(null);
@@ -15,15 +20,15 @@ export default function Page() {
   const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
   const [modelId,  setModelId]  = useState(PROVIDERS[0].models[0].id);
   const [apiKey,   setApiKey]   = useState("");
-  const [result,   setResult]   = useState<ReviewResult | null>(null);
+  const [results,  setResults]  = useState<DeviceResults | null>(null);
 
-  function handleResult(r: ReviewResult) {
-    setResult(r);
+  function handleResults(r: DeviceResults) {
+    setResults(r);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleReset() {
-    setResult(null);
+    setResults(null);
     setPcImage(null);
     setSpImage(null);
     setContext("");
@@ -31,14 +36,14 @@ export default function Page() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg }}>
-      <NavBar onReset={result ? handleReset : undefined} />
+      <NavBar onReset={results ? handleReset : undefined} />
       <div style={{
-        maxWidth:   result ? 1200 : 680,
+        maxWidth:   results ? 1200 : 680,
         margin:     "0 auto",
         padding:    "48px 24px 88px",
         transition: "max-width .3s",
       }}>
-        {!result ? (
+        {!results ? (
           <InputPhase
             context={context}     setContext={setContext}
             pcImage={pcImage}     setPcImage={setPcImage}
@@ -46,11 +51,12 @@ export default function Page() {
             provider={provider}   setProvider={setProvider}
             modelId={modelId}     setModelId={setModelId}
             apiKey={apiKey}       setApiKey={setApiKey}
-            onResult={handleResult}
+            onResults={handleResults}
           />
         ) : (
           <ResultPhase
-            result={result}
+            pcResult={results.pc ?? null}
+            spResult={results.sp ?? null}
             pcImage={pcImage}
             spImage={spImage}
             provider={provider.name}

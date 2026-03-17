@@ -72,7 +72,11 @@ export async function runAgentLoop(input: OrchestratorInput): Promise<ReviewResu
   step("synthesis", "統合完了", "done", `${finalResult.issues?.length ?? 0}件の指摘を生成`);
 
   // ── Step 5: 履歴保存 ──────────────────────────
-  const reviewWithMeta: ReviewResult = { ...finalResult, lpUrl };
+  const reviewWithMeta: ReviewResult = {
+    ...finalResult,
+    lpUrl,
+    sources: researchResult.sources.slice(0, 8),
+  };
   await saveReview({
     id: crypto.randomUUID(), context, lpUrl,
     result: reviewWithMeta, createdAt: new Date().toISOString(),
