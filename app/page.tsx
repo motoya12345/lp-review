@@ -15,49 +15,23 @@ export default function Page() {
   const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
   const [modelId,  setModelId]  = useState(PROVIDERS[0].models[0].id);
   const [apiKey,   setApiKey]   = useState("");
+  const [result,   setResult]   = useState<ReviewResult | null>(null);
 
-  const [loading, setLoading]   = useState(false);
-  const [error,   setError]     = useState<string | null>(null);
-  const [result,  setResult]    = useState<ReviewResult | null>(null);
+  function handleResult(r: ReviewResult) {
+    setResult(r);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
-  const run = async () => {
-    if (!context.trim() || (!pcImage && !spImage)) return;
-    setLoading(true); setError(null); setResult(null);
-    try {
-      const res  = await fetch("/api/review", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          context,
-          pcImage:  pcImage  ?? undefined,
-          spImage:  spImage  ?? undefined,
-          provider: provider.id,
-          modelId,
-          apiKey:   provider.needsKey ? apiKey : undefined,
-        }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setResult(data.result);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "エラーが発生しました");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const reset = () => {
+  function handleReset() {
     setResult(null);
     setPcImage(null);
     setSpImage(null);
     setContext("");
-    setError(null);
-  };
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg }}>
-      <NavBar onReset={result ? reset : undefined} />
+      <NavBar onReset={result ? handleReset : undefined} />
       <div style={{
         maxWidth:   result ? 1200 : 680,
         margin:     "0 auto",
@@ -72,8 +46,7 @@ export default function Page() {
             provider={provider}   setProvider={setProvider}
             modelId={modelId}     setModelId={setModelId}
             apiKey={apiKey}       setApiKey={setApiKey}
-            loading={loading}     error={error}
-            onRun={run}
+            onResult={handleResult}
           />
         ) : (
           <ResultPhase
@@ -82,7 +55,7 @@ export default function Page() {
             spImage={spImage}
             provider={provider.name}
             modelId={modelId}
-            onReset={reset}
+            onReset={handleReset}
           />
         )}
       </div>

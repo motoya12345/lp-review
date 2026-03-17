@@ -1,10 +1,20 @@
 "use client";
 
-import type { Provider } from "@/lib/types";
+import { useState } from "react";
+import type { AgentStep, Provider, ReviewResult } from "@/lib/types";
 import { PROVIDERS } from "@/lib/providers";
 import ImageDropZone from "./ImageDropZone";
 import ProviderPicker from "./ProviderPicker";
+import AgentProgress from "./AgentProgress";
 import { C, FONT } from "@/lib/tokens";
+
+function upsertStep(prev: AgentStep[], next: AgentStep): AgentStep[] {
+  const idx = prev.findIndex((s) => s.id === next.id);
+  if (idx === -1) return [...prev, next];
+  const updated = [...prev];
+  updated[idx] = next;
+  return updated;
+}
 
 interface Props {
   context:     string;
@@ -19,9 +29,7 @@ interface Props {
   setModelId:  (v: string) => void;
   apiKey:      string;
   setApiKey:   (v: string) => void;
-  loading:     boolean;
-  error:       string | null;
-  onRun:       () => void;
+  onResult:    (result: ReviewResult) => void;
 }
 
 export function InputPhase({
@@ -31,20 +39,80 @@ export function InputPhase({
   provider, setProvider,
   modelId, setModelId,
   apiKey, setApiKey,
-  loading, error, onRun,
+  onResult,
 }: Props) {
-  const hasImage    = !!pcImage || !!spImage;
-  const needsKey    = provider.needsKey;
-  const canSubmit   = context.trim() && hasImage && (!needsKey || apiKey.trim());
+  const [loading, setLoading] = useState(false);
+  const [steps,   setSteps]   = useState<AgentStep[]>([]);
+  const [error,   setError]   = useState<string | null>(null);
 
-  function getDisabledReason(): string | null {
-    if (!context.trim()) return "LPの目的・ターゲットを入力してください";
-    if (!hasImage)        return "LPのスクリーンショットをアップロードしてください";
-    if (needsKey && !apiKey.trim()) return `${provider.name}のAPIキーを入力してください`;
-    return null;
+  const hasImage  = !!pcImage || !!spImage;
+  const needsKey  = provider.needsKey;
+  const canSubmit = context.trim() && hasImage && (!needsKey || apiKey.trim());
+
+  async function handleRun() {
+    if (!canSubmit || loading) return;
+    setLoading(true);
+    setError(null);
+    setSteps([]);
+
+    try {
+      const res = await fetch("/api/review", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context,
+          pcImage:  pcImage  ?? undefined,
+          spImage:  spImage  ?? undefined,
+          provider: provider.id,
+          modelId,
+          apiKey:   needsKey ? apiKey : undefined,
+        }),
+      });
+
+      if (!res.body) throw new Error("No response body");
+      const reader    = res.body.getReader();
+      const dec       = new TextDecoder();
+      let   lastEvent = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const line of dec.decode(value).split("\n")) {
+          if (line.startsWith("event: ")) {
+            lastEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (lastEvent === "step")   setSteps((prev) => upsertStep(prev, data as AgentStep));
+              if (lastEvent === "result") { onResult(data as ReviewResult); return; }
+              if (lastEvent === "error")  setError(data.message ?? "エラーが発生しました");
+            } catch { /* ignore parse errors */ }
+          }
+        }
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "レビューに失敗しました");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const disabledReason = getDisabledReason();
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>
+          AIエージェントが分析中です...
+        </div>
+        <AgentProgress steps={steps} />
+      </div>
+    );
+  }
+
+  const disabledReason =
+    !context.trim()           ? "LPの目的・ターゲットを入力してください" :
+    !hasImage                  ? "LPのスクリーンショットをアップロードしてください" :
+    needsKey && !apiKey.trim() ? `${provider.name}のAPIキーを入力してください` :
+    null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
@@ -91,9 +159,7 @@ export function InputPhase({
           apiKey={apiKey}
           onProviderChange={(id) => {
             const p = PROVIDERS.find((p) => p.id === id)!;
-            setProvider(p);
-            setModelId(p.models[0].id);
-            setApiKey("");
+            setProvider(p); setModelId(p.models[0].id); setApiKey("");
           }}
           onModelChange={setModelId}
           onApiKeyChange={setApiKey}
@@ -102,7 +168,7 @@ export function InputPhase({
 
       {/* Submit */}
       <div>
-        {disabledReason && !loading && (
+        {disabledReason && (
           <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
             👆 {disabledReason}
           </div>
@@ -117,35 +183,19 @@ export function InputPhase({
           </div>
         )}
         <button
-          onClick={onRun}
-          disabled={!canSubmit || loading}
+          onClick={handleRun}
+          disabled={!canSubmit}
           style={{
             width: "100%", padding: "14px 24px",
-            background: canSubmit && !loading ? C.red : "#d4cfc9",
+            background: canSubmit ? C.red : "#d4cfc9",
             color: "#fff", border: "none", borderRadius: 8,
             fontSize: 15, fontWeight: 700,
-            cursor: canSubmit && !loading ? "pointer" : "not-allowed",
-            boxShadow: canSubmit && !loading ? "0 2px 8px rgba(200,41,30,0.25)" : "none",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            gap: 10, transition: "all 0.15s",
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            boxShadow: canSubmit ? "0 2px 8px rgba(200,41,30,0.25)" : "none",
+            transition: "all 0.15s",
           }}
         >
-          {loading ? (
-            <>
-              <span style={{
-                width: 16, height: 16,
-                border: "2px solid rgba(255,255,255,0.4)",
-                borderTop: "2px solid #fff",
-                borderRadius: "50%", display: "inline-block",
-                animation: "spin 0.7s linear infinite",
-              }} />
-              <span style={{ animation: "pulse 1.6s ease infinite" }}>
-                {provider.name} が詳細にレビュー中... 指摘が多い場合は1〜2分かかります
-              </span>
-            </>
-          ) : (
-            "レビューを実行する"
-          )}
+          エージェントでレビューを実行する
         </button>
       </div>
     </div>
