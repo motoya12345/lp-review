@@ -123,7 +123,7 @@ npm run dev
 |---|---|
 | **Claude** | Sonnet 4.6 / Opus 4.6 / Haiku 4.5 |
 | **ChatGPT** | GPT-4o / GPT-4o mini |
-| **Gemini** | Gemini 2.0 Flash / Gemini 1.5 Pro |
+| **Gemini** | Gemini 2.0 Flash Lite / Gemini 2.5 Pro |
 
 ## レビュー結果の見方
 
