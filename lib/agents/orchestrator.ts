@@ -69,7 +69,7 @@ export async function runAgentLoop(input: OrchestratorInput): Promise<ReviewResu
     context, researchResult, uxResult, copyResult, croResult,
     previousReview, pcImageB64, spImageB64, modelId, apiKey,
   });
-  step("synthesis", "統合完了", "done", `${finalResult.issues.length}件の指摘を生成`);
+  step("synthesis", "統合完了", "done", `${finalResult.issues?.length ?? 0}件の指摘を生成`);
 
   // ── Step 5: 履歴保存 ──────────────────────────
   const reviewWithMeta: ReviewResult = { ...finalResult, lpUrl };

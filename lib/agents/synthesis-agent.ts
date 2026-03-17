@@ -79,7 +79,7 @@ ${input.researchResult.industryBestPractices.join("\n")}
 参考URL: ${input.researchResult.sources.slice(0, 5).map((s) => s.url).join(", ")}
 
 ${input.previousReview ? `【前回レビュー（${input.previousReview.createdAt.slice(0, 10)}）】
-前回の最優先課題: ${input.previousReview.result.issues[0]?.problem ?? "なし"}` : ""}
+前回の最優先課題: ${input.previousReview.result.issues?.[0]?.problem ?? "なし"}` : ""}
 
 上記の分析結果とLP画像をもとに、すべての問題点を画像座標付きでJSONで返してください。
 `.trim();
@@ -109,5 +109,11 @@ ${input.previousReview ? `【前回レビュー（${input.previousReview.created
   const clean  = raw.replace(/```json|```/g, "").trim();
   const parsed = JSON.parse(clean);
 
-  return { ...parsed, reviewedAt: new Date().toISOString() };
+  return {
+    summary:     parsed.summary     ?? "",
+    strengths:   parsed.strengths   ?? [],
+    issues:      parsed.issues      ?? [],
+    next_action: parsed.next_action ?? "",
+    reviewedAt:  new Date().toISOString(),
+  };
 }

@@ -70,24 +70,33 @@ export function InputPhase({
       });
 
       if (!res.body) throw new Error("No response body");
-      const reader    = res.body.getReader();
-      const dec       = new TextDecoder();
-      let   lastEvent = "";
+      const reader = res.body.getReader();
+      const dec    = new TextDecoder();
+      let   buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        for (const line of dec.decode(value).split("\n")) {
-          if (line.startsWith("event: ")) {
-            lastEvent = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (lastEvent === "step")   setSteps((prev) => upsertStep(prev, data as AgentStep));
-              if (lastEvent === "result") { onResult(data as ReviewResult); return; }
-              if (lastEvent === "error")  setError(data.message ?? "エラーが発生しました");
-            } catch { /* ignore parse errors */ }
+
+        // チャンクをバッファに追記し、\n\n で区切られた完全なSSEメッセージを処理
+        buffer += dec.decode(value, { stream: true });
+        const messages = buffer.split("\n\n");
+        buffer = messages.pop() ?? ""; // 最後の不完全なメッセージはバッファに残す
+
+        for (const message of messages) {
+          let event = "";
+          let data  = "";
+          for (const line of message.split("\n")) {
+            if (line.startsWith("event: ")) event = line.slice(7).trim();
+            if (line.startsWith("data: "))  data  = line.slice(6);
           }
+          if (!data) continue;
+          try {
+            const parsed = JSON.parse(data);
+            if (event === "step")   setSteps((prev) => upsertStep(prev, parsed as AgentStep));
+            if (event === "result") { onResult(parsed as ReviewResult); return; }
+            if (event === "error")  setError(parsed.message ?? "エラーが発生しました");
+          } catch { /* ignore parse errors */ }
         }
       }
     } catch (e: unknown) {
