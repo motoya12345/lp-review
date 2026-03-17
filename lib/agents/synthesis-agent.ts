@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { callAI } from "./ai-client";
 import type { ReviewResult, ResearchResult, AgentAnalysis, ReviewHistory } from "@/lib/types";
 
 const SYNTHESIS_PROMPT = `あなたはLPレビューの統合エージェントです。
@@ -55,57 +55,53 @@ export async function runSynthesisAgent(input: {
   previousReview: ReviewHistory | null;
   pcImageB64?:    string;
   spImageB64?:    string;
+  provider:       string;
   modelId:        string;
   apiKey?:        string;
 }): Promise<ReviewResult> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const imageLines: string[] = [];
+  if (input.pcImageB64) imageLines.push("↑ PC版LP");
+  if (input.spImageB64) imageLines.push("↑ SP版LP");
 
-  const userMessage = `
-【LP情報】
-目的・ターゲット: ${input.context}
+  const userMessage = [
+    ...imageLines,
+    `【LP情報】`,
+    `目的・ターゲット: ${input.context}`,
+    ``,
+    `【UX分析結果】`,
+    ...input.uxResult.findings,
+    ``,
+    `【コピー分析結果】`,
+    ...input.copyResult.findings,
+    ``,
+    `【CVR分析結果】`,
+    ...input.croResult.findings,
+    ``,
+    `【競合・業界調査結果】`,
+    ...input.researchResult.competitorInsights,
+    ...input.researchResult.industryBestPractices,
+    `参考URL: ${input.researchResult.sources.slice(0, 5).map((s) => s.url).join(", ")}`,
+    ``,
+    input.previousReview
+      ? `【前回レビュー（${input.previousReview.createdAt.slice(0, 10)}）】\n前回の最優先課題: ${input.previousReview.result.issues?.[0]?.problem ?? "なし"}`
+      : "",
+    ``,
+    `上記の分析結果とLP画像をもとに、すべての問題点を画像座標付きでJSONで返してください。`,
+  ].filter(Boolean).join("\n");
 
-【UX分析結果】
-${input.uxResult.findings.join("\n")}
+  const imageB64s: string[] = [];
+  if (input.pcImageB64) imageB64s.push(input.pcImageB64);
+  if (input.spImageB64) imageB64s.push(input.spImageB64);
 
-【コピー分析結果】
-${input.copyResult.findings.join("\n")}
-
-【CVR分析結果】
-${input.croResult.findings.join("\n")}
-
-【競合・業界調査結果】
-${input.researchResult.competitorInsights.join("\n")}
-${input.researchResult.industryBestPractices.join("\n")}
-参考URL: ${input.researchResult.sources.slice(0, 5).map((s) => s.url).join(", ")}
-
-${input.previousReview ? `【前回レビュー（${input.previousReview.createdAt.slice(0, 10)}）】
-前回の最優先課題: ${input.previousReview.result.issues?.[0]?.problem ?? "なし"}` : ""}
-
-上記の分析結果とLP画像をもとに、すべての問題点を画像座標付きでJSONで返してください。
-`.trim();
-
-  // 画像を含めたコンテンツ構築
-  const content: Anthropic.MessageParam["content"] = [];
-  if (input.pcImageB64) {
-    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: input.pcImageB64 } });
-    content.push({ type: "text", text: "↑ PC版LP" });
-  }
-  if (input.spImageB64) {
-    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: input.spImageB64 } });
-    content.push({ type: "text", text: "↑ SP版LP" });
-  }
-  content.push({ type: "text", text: userMessage });
-
-  const modelId = input.modelId.startsWith("claude") ? input.modelId : "claude-sonnet-4-6";
-
-  const res = await client.messages.create({
-    model:      modelId,
-    max_tokens: 4096,
-    system:     SYNTHESIS_PROMPT,
-    messages:   [{ role: "user", content }],
+  const raw = await callAI({
+    provider:  input.provider,
+    modelId:   input.modelId,
+    apiKey:    input.apiKey,
+    system:    SYNTHESIS_PROMPT,
+    userText:  userMessage,
+    imageB64s,
+    maxTokens: 4096,
   });
-
-  const raw    = res.content.map((b) => ("text" in b ? b.text : "")).join("");
   const clean  = raw.replace(/```json|```/g, "").trim();
   const parsed = JSON.parse(clean);
 

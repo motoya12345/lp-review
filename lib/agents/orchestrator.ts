@@ -67,7 +67,7 @@ export async function runAgentLoop(input: OrchestratorInput): Promise<ReviewResu
   step("synthesis", "全結果を統合・座標を推定中...", "running");
   const finalResult = await runSynthesisAgent({
     context, researchResult, uxResult, copyResult, croResult,
-    previousReview, pcImageB64, spImageB64, modelId, apiKey,
+    previousReview, pcImageB64, spImageB64, provider, modelId, apiKey,
   });
   step("synthesis", "統合完了", "done", `${finalResult.issues?.length ?? 0}件の指摘を生成`);
 
