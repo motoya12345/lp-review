@@ -25,3 +25,9 @@ export const FONT = {
   sans: "var(--font-dm-sans), 'Hiragino Sans', sans-serif",
   mono: "var(--font-dm-mono), 'Courier New', monospace",
 } as const;
+
+export const SEVERITY_COLOR = {
+  critical: "#c8291e",
+  major:    "#8a5a0c",
+  minor:    "#1a52a0",
+} as const;

@@ -1,84 +1,91 @@
 "use client";
+
 import { useState } from "react";
-import NavBar from "@/components/NavBar";
-import InputPhase from "@/components/InputPhase";
-import ResultPhase from "@/components/ResultPhase";
-import HistoryPanel from "@/components/HistoryPanel";
-import { ReviewResult, ReviewHistory } from "@/lib/types";
+import NavBar           from "@/components/NavBar";
+import { InputPhase }   from "@/components/InputPhase";
+import { ResultPhase }  from "@/components/ResultPhase";
+import { PROVIDERS }    from "@/lib/providers";
+import type { ReviewResult, Provider } from "@/lib/types";
 import { C } from "@/lib/tokens";
 
-interface ResultState {
-  result:       ReviewResult;
-  pcImage:      string | null;
-  spImage:      string | null;
-  providerName: string;
-  modelId:      string;
-}
+export default function Page() {
+  const [context,  setContext]  = useState("");
+  const [pcImage,  setPcImage]  = useState<string | null>(null);
+  const [spImage,  setSpImage]  = useState<string | null>(null);
+  const [provider, setProvider] = useState<Provider>(PROVIDERS[0]);
+  const [modelId,  setModelId]  = useState(PROVIDERS[0].models[0].id);
+  const [apiKey,   setApiKey]   = useState("");
 
-export default function Home() {
-  const [resultState, setResultState] = useState<ResultState | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error,   setError]     = useState<string | null>(null);
+  const [result,  setResult]    = useState<ReviewResult | null>(null);
 
-  function handleResult(
-    result: unknown,
-    pcImage: string | null,
-    spImage: string | null,
-    providerName: string,
-    modelId: string,
-  ) {
-    setResultState({
-      result: result as ReviewResult,
-      pcImage,
-      spImage,
-      providerName,
-      modelId,
-    });
-    // 結果が出たらトップへスクロール
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  const run = async () => {
+    if (!context.trim() || (!pcImage && !spImage)) return;
+    setLoading(true); setError(null); setResult(null);
+    try {
+      const res  = await fetch("/api/review", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context,
+          pcImage:  pcImage  ?? undefined,
+          spImage:  spImage  ?? undefined,
+          provider: provider.id,
+          modelId,
+          apiKey:   provider.needsKey ? apiKey : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setResult(data.result);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "エラーが発生しました");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  function handleReset() {
-    setResultState(null);
-  }
-
-  function handleHistorySelect(history: ReviewHistory) {
-    setResultState({
-      result:       history.result,
-      pcImage:      null,
-      spImage:      null,
-      providerName: "履歴",
-      modelId:      "saved",
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  const reset = () => {
+    setResult(null);
+    setPcImage(null);
+    setSpImage(null);
+    setContext("");
+    setError(null);
+  };
 
   return (
-    <>
-      <NavBar />
-      <main
-        style={{
-          maxWidth:  680,
-          margin:    "0 auto",
-          padding:   "32px 24px 64px",
-          background: C.bg,
-          minHeight: "calc(100vh - 52px)",
-        }}
-      >
-        {!resultState ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            <InputPhase onResult={handleResult} />
-            <HistoryPanel onSelect={handleHistorySelect} />
-          </div>
+    <div style={{ minHeight: "100vh", background: C.bg }}>
+      <NavBar onReset={result ? reset : undefined} />
+      <div style={{
+        maxWidth:   result ? 1200 : 680,
+        margin:     "0 auto",
+        padding:    "48px 24px 88px",
+        transition: "max-width .3s",
+      }}>
+        {!result ? (
+          <InputPhase
+            context={context}     setContext={setContext}
+            pcImage={pcImage}     setPcImage={setPcImage}
+            spImage={spImage}     setSpImage={setSpImage}
+            provider={provider}   setProvider={setProvider}
+            modelId={modelId}     setModelId={setModelId}
+            apiKey={apiKey}       setApiKey={setApiKey}
+            loading={loading}     error={error}
+            onRun={run}
+          />
         ) : (
           <ResultPhase
-            result={resultState.result}
-            pcImage={resultState.pcImage}
-            spImage={resultState.spImage}
-            providerName={resultState.providerName}
-            modelId={resultState.modelId}
-            onReset={handleReset}
+            result={result}
+            pcImage={pcImage}
+            spImage={spImage}
+            provider={provider.name}
+            modelId={modelId}
+            onReset={reset}
           />
         )}
-      </main>
-    </>
+      </div>
+    </div>
   );
 }

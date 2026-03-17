@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Provider, ProviderId } from "@/lib/types";
-import { PROVIDERS } from "@/lib/api-callers";
+import { PROVIDERS } from "@/lib/providers";
 import { C, FONT } from "@/lib/tokens";
 
 interface Props {
