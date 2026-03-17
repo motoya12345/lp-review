@@ -181,6 +181,44 @@ export default function ActionCard({ action, defaultOpen = false }: Props) {
                 <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.5 }}>{action.after}</div>
               </div>
             </div>
+
+            {/* Evidence */}
+            {action.evidence && (
+              <div
+                style={{
+                  padding: "10px 12px",
+                  background: C.amberBg,
+                  border: `1px solid ${C.amberBd}`,
+                  borderRadius: 6,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontFamily: FONT.mono,
+                    color: C.amber,
+                    fontWeight: 700,
+                    marginBottom: 4,
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  EVIDENCE — 根拠
+                </div>
+                <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.5 }}>
+                  {action.evidence}
+                </div>
+                {action.source && (
+                  <a
+                    href={action.source}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 11, color: C.blue, wordBreak: "break-all", display: "block", marginTop: 4 }}
+                  >
+                    {action.source}
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
