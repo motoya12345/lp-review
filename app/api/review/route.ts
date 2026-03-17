@@ -4,7 +4,7 @@ import type { AgentStep } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { context, lpUrl, pcImage, spImage, modelId, apiKey } = body;
+  const { context, lpUrl, pcImage, spImage, provider, modelId, apiKey } = body;
 
   const encoder = new TextEncoder();
   const stream  = new TransformStream();
@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
         lpUrl,
         pcImageB64: pcImage?.replace(/^data:image\/\w+;base64,/, ""),
         spImageB64: spImage?.replace(/^data:image\/\w+;base64,/, ""),
-        modelId:    modelId ?? "claude-sonnet-4-6",
+        provider:   provider ?? "claude",
+        modelId:    modelId  ?? "claude-sonnet-4-6",
         apiKey,
         onStep: (step: AgentStep) => send("step", step),
       });

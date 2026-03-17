@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { callAI } from "./ai-client";
 import type { ReviewResult, ResearchResult, AgentAnalysis, ReviewHistory } from "@/lib/types";
 
 const SYNTHESIS_PROMPT = `あなたはLPレビューの統合エージェントです。
@@ -44,11 +44,10 @@ export async function runSynthesisAgent(input: {
   copyResult:     AgentAnalysis;
   croResult:      AgentAnalysis;
   previousReview: ReviewHistory | null;
+  provider:       string;
   modelId:        string;
   apiKey?:        string;
 }): Promise<ReviewResult> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
   const userMessage = `
 【LP情報】
 目的・ターゲット: ${input.context}
@@ -72,15 +71,16 @@ ${input.previousReview ? `【前回レビュー（${input.previousReview.created
 上記をもとに最終レビューをJSONで返してください。
 `.trim();
 
-  const res = await client.messages.create({
-    model:      input.modelId.startsWith("claude") ? input.modelId : "claude-sonnet-4-6",
-    max_tokens: 1500,
-    system:     SYNTHESIS_PROMPT,
-    messages:   [{ role: "user", content: userMessage }],
+  const raw = await callAI({
+    provider:  input.provider,
+    modelId:   input.modelId,
+    apiKey:    input.apiKey,
+    system:    SYNTHESIS_PROMPT,
+    userText:  userMessage,
+    maxTokens: 1500,
   });
 
-  const raw   = res.content.map((b) => ("text" in b ? b.text : "")).join("");
-  const clean = raw.replace(/```json|```/g, "").trim();
+  const clean  = raw.replace(/```json|```/g, "").trim();
   const parsed = JSON.parse(clean);
 
   return {

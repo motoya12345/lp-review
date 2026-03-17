@@ -12,13 +12,14 @@ export interface OrchestratorInput {
   lpUrl?:      string;
   pcImageB64?: string;
   spImageB64?: string;
+  provider:    string;
   modelId:     string;
   apiKey?:     string;
   onStep:      (step: AgentStep) => void;
 }
 
 export async function runAgentLoop(input: OrchestratorInput): Promise<ReviewResult> {
-  const { context, lpUrl, pcImageB64, spImageB64, modelId, apiKey, onStep } = input;
+  const { context, lpUrl, pcImageB64, spImageB64, provider, modelId, apiKey, onStep } = input;
 
   const step = (
     id: string,
@@ -58,9 +59,9 @@ export async function runAgentLoop(input: OrchestratorInput): Promise<ReviewResu
   step("cro",  "CVR・CTAを分析中...", "running");
 
   const [uxResult, copyResult, croResult] = await Promise.all([
-    runUXAgent({   context, fetchedLP, pcImageB64, spImageB64, modelId, apiKey }),
-    runCopyAgent({ context, fetchedLP, pcImageB64, spImageB64, modelId, apiKey }),
-    runCROAgent({  context, fetchedLP, pcImageB64, spImageB64, modelId, apiKey }),
+    runUXAgent({   context, fetchedLP, pcImageB64, spImageB64, provider, modelId, apiKey }),
+    runCopyAgent({ context, fetchedLP, pcImageB64, spImageB64, provider, modelId, apiKey }),
+    runCROAgent({  context, fetchedLP, pcImageB64, spImageB64, provider, modelId, apiKey }),
   ]);
 
   step("ux",   "UX分析完了",    "done");
@@ -76,6 +77,7 @@ export async function runAgentLoop(input: OrchestratorInput): Promise<ReviewResu
     copyResult,
     croResult,
     previousReview,
+    provider,
     modelId,
     apiKey,
   });
